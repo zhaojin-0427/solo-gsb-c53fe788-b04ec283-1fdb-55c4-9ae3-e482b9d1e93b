@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多标注语料冲突裁决台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>多标注语料冲突裁决台</h1>
+  <div class="project-bar">
+    <select id="projectSelect" title="选择项目"></select>
+    <button id="newProjectBtn" type="button">新建项目</button>
+    <span id="envBadge" class="badge"></span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="docs" class="active">① 文档导入</button>
+  <button data-tab="labels">② 标签与规则</button>
+  <button data-tab="annotators">③ 标注者权重</button>
+  <button data-tab="annotations">④ 提交标注</button>
+  <button data-tab="adjudicate">⑤ 裁决台</button>
+  <button data-tab="reports">⑥ 共识报告</button>
+</nav>
+
+<main>
+  <!-- ① 文档 -->
+  <section id="tab-docs" class="tab active">
+    <h2>导入 UTF-8 文档与词元边界</h2>
+    <p class="hint">文档为 UTF-8 文本；词元边界为 <code>[[start,end], ...]</code>（半开区间、按起点升序，
+    例如 <code>[[0,2],[3,5]]</code>）。重新导入会写入一份<strong>新文档</strong>，旧文档及其报告保持不变。</p>
+    <form id="docForm">
+      <label>文档名（可选） <input type="text" name="name" placeholder="默认取文件名"></label>
+      <label>UTF-8 文档 <input type="file" name="doc_file" accept=".txt,text/plain"></label>
+      <label>词元边界 JSON <input type="file" name="tokens_file" accept=".json,application/json,.txt"></label>
+      <details><summary>或直接粘贴内容</summary>
+        <textarea name="content" rows="3" placeholder="文档正文（UTF-8）"></textarea>
+        <textarea name="tokens_text" rows="2" placeholder='词元边界，如 [[0,2],[3,5]]'></textarea>
+      </details>
+      <button type="submit">导入</button>
+    </form>
+    <div id="docList"></div>
+  </section>
+
+  <!-- ② 标签 -->
+  <section id="tab-labels" class="tab">
+    <h2>标签定义</h2>
+    <form id="labelForm" class="inline-form">
+      <input type="text" name="name" placeholder="新标签名，如 Person / Organization" required>
+      <button type="submit">添加标签</button>
+    </form>
+    <div id="labelList"></div>
+    <h2>标签关系（可嵌套 / 互斥）</h2>
+    <p class="hint">未声明关系的两个<strong>不同</strong>标签默认<strong>互斥</strong>（区间不得重叠）；
+    同标签区间重叠恒为冲突。嵌套为方向性规则：外层标签可严格包含内层标签。</p>
+    <form id="relationForm" class="inline-form">
+      <select name="outer_id" required></select>
+      <select name="kind">
+        <option value="nested">可嵌套（左=外层，右=内层）</option>
+        <option value="mutex">互斥（显式声明）</option>
+      </select>
+      <select name="inner_id" required></select>
+      <button type="submit">添加关系</button>
+    </form>
+    <div id="relationList"></div>
+  </section>
+
+  <!-- ③ 标注者 -->
+  <section id="tab-annotators" class="tab">
+    <h2>标注者与权重（1～10）</h2>
+    <form id="annotatorForm" class="inline-form">
+      <input type="text" name="name" placeholder="标注者姓名" required>
+      <input type="number" name="weight" min="1" max="10" value="5" required>
+      <button type="submit">添加标注者</button>
+    </form>
+    <div id="annotatorList"></div>
+  </section>
+
+  <!-- ④ 标注 -->
+  <section id="tab-annotations" class="tab">
+    <h2>提交字符区间标注（2～8 名标注者，针对同一文档）</h2>
+    <div class="inline-form">
+      <label>文档 <select id="annDocSelect"></select></label>
+      <label>标注者 <select id="annAnnotatorSelect"></select></label>
+      <button type="button" id="loadAnnBtn">载入该标注者现有标注</button>
+    </div>
+    <p class="hint">每行一条：<code>start,end,标签名</code>（半开区间，逗号分隔）。
+    提交为<strong>整批替换</strong>；越界或切开词元的区间会被整批拒绝，不写入任何数据。</p>
+    <textarea id="annText" rows="8" placeholder="0,5,Person&#10;7,18,Organization"></textarea>
+    <div class="row">
+      <button type="button" id="submitAnnBtn">提交校验并保存</button>
+      <button type="button" id="showAllAnnBtn">查看该文档全部标注</button>
+    </div>
+    <pre id="annResult" class="result"></pre>
+    <div id="allAnnList"></div>
+  </section>
+
+  <!-- ⑤ 裁决 -->
+  <section id="tab-adjudicate" class="tab">
+    <h2>冲突裁决台</h2>
+    <div class="inline-form">
+      <label>文档 <select id="adjDocSelect"></select></label>
+      <button type="button" id="newAdjBtn">新建裁决（求最优共识）</button>
+      <label>已有裁决 <select id="adjSelect"></select></label>
+    </div>
+    <div id="adjPanel"></div>
+  </section>
+
+  <!-- ⑥ 报告 -->
+  <section id="tab-reports" class="tab">
+    <h2>共识报告（不可变）</h2>
+    <p class="hint">报告生成后冻结，内含<strong>输入快照、算法参数、应用与求解器版本号、SHA-256</strong>。
+    重新导入文档、修改标签规则或标注者权重都不会改写旧报告；每次生成得到递增新版本。</p>
+    <div id="reportList"></div>
+  </section>
+</main>
+
+<dialog id="projectDialog">
+  <form method="dialog" id="projectDialogForm">
+    <h3>新建项目</h3>
+    <input type="text" name="name" placeholder="项目名称" required>
+    <menu>
+      <button value="cancel">取消</button>
+      <button id="projectConfirm" value="default">创建</button>
+    </menu>
+  </form>
+</dialog>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

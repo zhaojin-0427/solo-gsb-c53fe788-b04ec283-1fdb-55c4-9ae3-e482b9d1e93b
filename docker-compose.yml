@@ -1,0 +1,21 @@
+services:
+  api:
+    build: ./backend
+    container_name: adjudication-api
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - adjudication-data:/data
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    container_name: adjudication-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  adjudication-data:
